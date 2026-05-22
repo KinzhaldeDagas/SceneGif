@@ -5,6 +5,7 @@
 #include <wincodec.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -126,6 +127,7 @@ namespace
 	static std::string s_oblivionDir = ".\\";
 	static UInt16 s_screenshotKey = DIK_U_VALUE;
 	static ScreenshotFormat s_format = kScreenshotFormat_Gif;
+	static std::string s_screenshotDir;
 	static GifProfile s_gifProfile;
 	static GifRecorder s_recorder;
 	static bool s_pendingStillCapture = false;
@@ -218,6 +220,8 @@ namespace
 			"[Screenshot]\r\n"
 			"Key=U\r\n"
 			"Format=gif\r\n"
+			"; Relative paths resolve from the Oblivion root. Absolute Windows paths are allowed.\r\n"
+			"OutputPath=Screenshots\\SceneGIFs\r\n"
 			"\r\n"
 			"[GIF]\r\n"
 			"; Production default: 720 px / 12 FPS / 5 seconds / under 3 MB target.\r\n"
@@ -252,6 +256,122 @@ namespace
 			--end;
 
 		return std::string(start, end);
+	}
+
+	bool IsPathSlash(char c)
+	{
+		return c == '\\' || c == '/';
+	}
+
+	bool IsAbsolutePath(const std::string& path)
+	{
+		if (path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':' && IsPathSlash(path[2]))
+			return true;
+
+		return path.size() >= 2 && IsPathSlash(path[0]) && IsPathSlash(path[1]);
+	}
+
+	bool IsDirectoryRoot(const std::string& path)
+	{
+		if (path.size() == 3 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':' && IsPathSlash(path[2]))
+			return true;
+
+		return path.size() <= 2 && !path.empty() && IsPathSlash(path[0]);
+	}
+
+	void NormalizePathSlashes(std::string& path)
+	{
+		for (char& c : path)
+		{
+			if (c == '/')
+				c = '\\';
+		}
+	}
+
+	void EnsureTrailingSlash(std::string& path)
+	{
+		if (!path.empty() && !IsPathSlash(path.back()))
+			path += '\\';
+	}
+
+	std::string ResolveScreenshotDirectory(const char* configuredPath)
+	{
+		std::string path = TrimCopy(configuredPath);
+		if (path.size() >= 2 && path.front() == '"' && path.back() == '"')
+			path = path.substr(1, path.size() - 2);
+		if (path.empty())
+			path = "Screenshots\\SceneGIFs";
+
+		NormalizePathSlashes(path);
+
+		if (!IsAbsolutePath(path))
+			path = MakeOblivionPath(path.c_str());
+
+		NormalizePathSlashes(path);
+		EnsureTrailingSlash(path);
+		return path;
+	}
+
+	bool EnsureDirectoryTree(const std::string& directory)
+	{
+		if (directory.empty())
+			return false;
+
+		std::string path = directory;
+		NormalizePathSlashes(path);
+
+		while (!path.empty() && IsPathSlash(path.back()) && !IsDirectoryRoot(path))
+			path.pop_back();
+
+		if (path.empty())
+			return false;
+
+		std::string current;
+		size_t start = 0;
+
+		if (path.size() >= 3 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':' && IsPathSlash(path[2]))
+		{
+			current = path.substr(0, 3);
+			start = 3;
+		}
+		else if (path.size() >= 2 && IsPathSlash(path[0]) && IsPathSlash(path[1]))
+		{
+			size_t serverEnd = path.find('\\', 2);
+			if (serverEnd == std::string::npos)
+				return false;
+			size_t shareEnd = path.find('\\', serverEnd + 1);
+			if (shareEnd == std::string::npos)
+				return GetFileAttributes(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+
+			current = path.substr(0, shareEnd);
+			start = shareEnd + 1;
+		}
+
+		while (start < path.size())
+		{
+			size_t slash = path.find('\\', start);
+			std::string part = slash == std::string::npos ? path.substr(start) : path.substr(start, slash - start);
+			if (!part.empty())
+			{
+				if (!current.empty() && !IsPathSlash(current.back()))
+					current += '\\';
+				current += part;
+
+				if (!CreateDirectory(current.c_str(), nullptr))
+				{
+					DWORD error = GetLastError();
+					if (error != ERROR_ALREADY_EXISTS)
+						return false;
+				}
+			}
+
+			if (slash == std::string::npos)
+				break;
+			start = slash + 1;
+		}
+
+		DWORD attrs = GetFileAttributes(path.c_str());
+		return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
 	}
 
 	bool TryParseUInt32(const char* text, UInt32& out)
@@ -430,6 +550,16 @@ namespace
 			SetFormat("gif");
 		}
 
+		char outputPathBuffer[MAX_PATH * 2] = { 0 };
+		GetPrivateProfileString("Screenshot", "OutputPath", "Screenshots\\SceneGIFs", outputPathBuffer, sizeof(outputPathBuffer), path.c_str());
+		s_screenshotDir = ResolveScreenshotDirectory(outputPathBuffer);
+		if (!EnsureDirectoryTree(s_screenshotDir))
+		{
+			Log("Failed to create Screenshot.OutputPath '%s'; using Oblivion root", s_screenshotDir.c_str());
+			s_screenshotDir = s_oblivionDir;
+			EnsureTrailingSlash(s_screenshotDir);
+		}
+
 		s_gifProfile.maxWidth = ReadIniUInt(path, "GIF", "MaxWidth", 720, 1, 4096);
 		s_gifProfile.maxHeight = ReadIniUInt(path, "GIF", "MaxHeight", 450, 1, 4096);
 		s_gifProfile.seconds = ReadIniUInt(path, "GIF", "Seconds", 5, 1, 60);
@@ -503,16 +633,18 @@ namespace
 
 	std::string MakeScreenshotPath(const char* extension)
 	{
+		const std::string& root = s_screenshotDir.empty() ? s_oblivionDir : s_screenshotDir;
+
 		for (UInt32 idx = 0; idx < 10000; ++idx)
 		{
 			char filename[MAX_PATH] = { 0 };
-			sprintf_s(filename, sizeof(filename), "%sScreenShot%u.%s", s_oblivionDir.c_str(), idx, extension);
+			sprintf_s(filename, sizeof(filename), "%sScreenShot%u.%s", root.c_str(), idx, extension);
 			if (GetFileAttributes(filename) == INVALID_FILE_ATTRIBUTES)
 				return filename;
 		}
 
 		char fallback[MAX_PATH] = { 0 };
-		sprintf_s(fallback, sizeof(fallback), "%sScreenShot.%s", s_oblivionDir.c_str(), extension);
+		sprintf_s(fallback, sizeof(fallback), "%sScreenShot.%s", root.c_str(), extension);
 		return fallback;
 	}
 
