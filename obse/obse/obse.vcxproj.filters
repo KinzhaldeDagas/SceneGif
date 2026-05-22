@@ -258,6 +258,9 @@
     <ClCompile Include="Hooks_Script.cpp">
       <Filter>hooks</Filter>
     </ClCompile>
+    <ClCompile Include="Hooks_Screenshot.cpp">
+      <Filter>hooks</Filter>
+    </ClCompile>
     <ClCompile Include="PluginManager.cpp">
       <Filter>plugin_api</Filter>
     </ClCompile>
@@ -636,6 +639,9 @@
       <Filter>internals</Filter>
     </ClInclude>
     <ClInclude Include="Hooks_Input.h">
+      <Filter>hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="Hooks_Screenshot.h">
       <Filter>hooks</Filter>
     </ClInclude>
     <ClInclude Include="MemoryPool.cpp">

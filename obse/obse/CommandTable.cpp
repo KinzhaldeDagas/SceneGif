@@ -2980,6 +2980,10 @@ void CommandTable::Init(void)
 	g_scriptCommands.Replace(opcodeGetDisease, &newgetDisease);   //Ready for the mapping
 	//OBSE 22.10
 	ADD_CMD(sv_PrintBytes);
+	ADD_CMD(SetScreenshotKey);
+	ADD_CMD(GetScreenshotKey);
+	ADD_CMD(SetScreenshotFormat);
+	ADD_CMD_RET(GetScreenshotFormat, kRetnType_String);
 	/* to add later if problems can be solved
 	g_scriptCommands.Add(&kCommandInfo_SetCurrentClimate); // too many problems
 	g_scriptCommands.Add(&kCommandInfo_SetWorldspaceClimate);

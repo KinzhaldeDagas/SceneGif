@@ -19,6 +19,7 @@
 #include "Tasks.h"
 #include "EventManager.h"
 #include "Hooks_SaveLoad.h"
+#include "Hooks_Screenshot.h"
 #include "GameActorValues.h"
 #include "ThreadLocal.h"
 #include <obse\Settings.h>
@@ -27,6 +28,7 @@ static void HandleMainLoopHook(void);
 
 static constexpr UInt32 kMainLoopHookPatchAddr = 0x0040F19D;
 static constexpr UInt32 kMainLoopHookRetnAddr = 0x0040F1A3;
+static constexpr UInt32 kScreenshotCallPatchAddr = 0x0040D72F;
 
 static __declspec(naked) void MainLoopHook(void)
 {
@@ -264,6 +266,8 @@ static void HandleMainLoopHook(void)
 
 	// Tick event manager
 	EventManager::Tick();
+
+	Screenshot_Tick();
 }
 
 // workaround for inability to take address of __thiscall functions
@@ -1327,6 +1331,7 @@ void Hook_Gameplay_Init(void)
 	// game main loop
 	// this address was chosen because it is only run when oblivion is in the foreground
 	WriteRelJump(kMainLoopHookPatchAddr, (UInt32)&MainLoopHook);
+	WriteRelCall(kScreenshotCallPatchAddr, (UInt32)&Screenshot_HandleEngineRequest);
 	if(PreventCrashOnMapMarkerLoadSave) WriteRelCall(0x005B96BB, (UInt32)BSStringHook);
 	// patch enchanted cloned item check
 	SafeWrite8(0x0045DEAD + 1, 0x20);	// more accurate to branch to 0045DED7

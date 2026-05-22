@@ -3,6 +3,7 @@
 #include "obse_common/SafeWrite.h"
 #include "EventManager.h"
 #include "PluginManager.h"
+#include "Hooks_Screenshot.h"
 
 OSInputGlobalsEx* g_inputGlobal = nullptr;
 
@@ -388,6 +389,7 @@ void OSInputGlobalsEx::InputPollFakeHandle() {
 	}
 	SendControlEvents();
 	SendWheelEvents();
+	Screenshot_HandleInput(this);
 	FrameIndex = (FrameIndex + 1) % 2;
 
 }

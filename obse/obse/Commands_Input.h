@@ -49,3 +49,7 @@ extern CommandInfo kCommandInfo_IsKeyDisabled;
 extern CommandInfo kCommandInfo_IsControlDisabled;
 
 extern CommandInfo kCommandInfo_GetMouseButtonsSwapped;
+extern CommandInfo kCommandInfo_SetScreenshotKey;
+extern CommandInfo kCommandInfo_GetScreenshotKey;
+extern CommandInfo kCommandInfo_SetScreenshotFormat;
+extern CommandInfo kCommandInfo_GetScreenshotFormat;

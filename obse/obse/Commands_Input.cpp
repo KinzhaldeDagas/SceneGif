@@ -25,6 +25,7 @@
 #include "GameObjects.h"
 #include "GameForms.h"
 #include <obse/Hooks_Input.h>
+#include "Hooks_Screenshot.h"
 #include <obse/ModTable.h>
 #include "obse/GameData.h"
 
@@ -649,6 +650,44 @@ static bool Cmd_GetMouseButtonsSwapped_Execute(COMMAND_ARGS)
 	return true;
 }
 
+static bool Cmd_SetScreenshotKey_Execute(COMMAND_ARGS)
+{
+	*result = 0xFFFF;
+
+	UInt32 keycode = 0;
+	if (ExtractArgs(PASS_EXTRACT_ARGS, &keycode))
+	{
+		UInt16 previous = Screenshot_GetKey();
+		if (Screenshot_SetKey(keycode))
+			*result = previous;
+	}
+
+	return true;
+}
+
+static bool Cmd_GetScreenshotKey_Execute(COMMAND_ARGS)
+{
+	*result = Screenshot_GetKey();
+	return true;
+}
+
+static bool Cmd_SetScreenshotFormat_Execute(COMMAND_ARGS)
+{
+	*result = 0;
+
+	char format[64] = { 0 };
+	if (ExtractArgs(PASS_EXTRACT_ARGS, &format) && Screenshot_SetFormat(format))
+		*result = 1;
+
+	return true;
+}
+
+static bool Cmd_GetScreenshotFormat_Execute(COMMAND_ARGS)
+{
+	AssignToStringVar(PASS_COMMAND_ARGS, Screenshot_GetFormat());
+	return true;
+}
+
 #endif
 
 CommandInfo kCommandInfo_GetControl =
@@ -1184,3 +1223,7 @@ DEFINE_COMMAND(IsControl, returns 1 if key is a game control or 2 if a custom co
 DEFINE_COMMAND(IsKeyDisabled, returns 1 if the key is disabled, 0, 1, kParams_OneInt);
 DEFINE_COMMAND(IsControlDisabled, returns 1 if the control has been disabled with DisableControl, 0, 1, kParams_OneInt);
 DEFINE_COMMAND(GetMouseButtonsSwapped, returns 1 if the user has swapped the left and right mouse buttons, 0, 0, NULL);
+DEFINE_COMMAND(SetScreenshotKey, sets the key or mouse button used by the screenshot hook and returns the previous keycode, 0, 1, kParams_OneInt);
+DEFINE_COMMAND(GetScreenshotKey, returns the key or mouse button used by the screenshot hook, 0, 0, NULL);
+DEFINE_COMMAND(SetScreenshotFormat, sets the screenshot output format using gif png jpg bmp tiff or engine, 0, 1, kParams_OneString);
+DEFINE_COMMAND(GetScreenshotFormat, returns the screenshot output format, 0, 0, NULL);

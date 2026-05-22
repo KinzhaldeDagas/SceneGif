@@ -179,6 +179,7 @@
     <ClCompile Include="GameTiles.cpp" />
     <ClCompile Include="GameTypes.cpp" />
     <ClCompile Include="Hooks_Input.cpp" />
+    <ClCompile Include="Hooks_Screenshot.cpp" />
     <ClCompile Include="Script.cpp" />
     <ClCompile Include="NiAPI.cpp" />
     <ClCompile Include="NiCollision.cpp" />
@@ -289,6 +290,7 @@
     <ClInclude Include="GameTiles.h" />
     <ClInclude Include="GameTypes.h" />
     <ClInclude Include="Hooks_Input.h" />
+    <ClInclude Include="Hooks_Screenshot.h" />
     <ClInclude Include="MemoryPool.cpp" />
     <ClInclude Include="MemoryPool.h" />
     <ClInclude Include="Script.h" />
