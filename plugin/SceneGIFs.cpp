@@ -295,12 +295,30 @@ namespace
 			path += '\\';
 	}
 
+	std::string NormalizeDirectoryForCompare(std::string path)
+	{
+		NormalizePathSlashes(path);
+		while (!path.empty() && IsPathSlash(path.back()) && !IsDirectoryRoot(path))
+			path.pop_back();
+
+		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+
+		return path;
+	}
+
+	bool IsOblivionRootDirectory(const std::string& path)
+	{
+		return NormalizeDirectoryForCompare(path) == NormalizeDirectoryForCompare(s_oblivionDir);
+	}
+
 	std::string ResolveScreenshotDirectory(const char* configuredPath)
 	{
 		std::string path = TrimCopy(configuredPath);
 		if (path.size() >= 2 && path.front() == '"' && path.back() == '"')
 			path = path.substr(1, path.size() - 2);
-		if (path.empty())
+		if (path.empty() || path == "." || path == ".\\")
 			path = kDefaultScreenshotOutputPath;
 
 		NormalizePathSlashes(path);
@@ -310,6 +328,14 @@ namespace
 
 		NormalizePathSlashes(path);
 		EnsureTrailingSlash(path);
+
+		if (IsOblivionRootDirectory(path))
+		{
+			path = MakeOblivionPath(kDefaultScreenshotOutputPath);
+			NormalizePathSlashes(path);
+			EnsureTrailingSlash(path);
+		}
+
 		return path;
 	}
 
