@@ -123,6 +123,7 @@ namespace
 
 	static constexpr UInt16 DIK_SYSRQ_VALUE = 0xB7;
 	static constexpr UInt16 DIK_U_VALUE = 0x16;
+	static const char* const kDefaultScreenshotOutputPath = "Screenshots";
 
 	static std::string s_oblivionDir = ".\\";
 	static UInt16 s_screenshotKey = DIK_U_VALUE;
@@ -221,7 +222,7 @@ namespace
 			"Key=U\r\n"
 			"Format=gif\r\n"
 			"; Relative paths resolve from the Oblivion root. Absolute Windows paths are allowed.\r\n"
-			"OutputPath=Screenshots\\SceneGIFs\r\n"
+			"OutputPath=Screenshots\r\n"
 			"\r\n"
 			"[GIF]\r\n"
 			"; Production default: 720 px / 12 FPS / 5 seconds / under 3 MB target.\r\n"
@@ -300,7 +301,7 @@ namespace
 		if (path.size() >= 2 && path.front() == '"' && path.back() == '"')
 			path = path.substr(1, path.size() - 2);
 		if (path.empty())
-			path = "Screenshots\\SceneGIFs";
+			path = kDefaultScreenshotOutputPath;
 
 		NormalizePathSlashes(path);
 
@@ -551,13 +552,17 @@ namespace
 		}
 
 		char outputPathBuffer[MAX_PATH * 2] = { 0 };
-		GetPrivateProfileString("Screenshot", "OutputPath", "Screenshots\\SceneGIFs", outputPathBuffer, sizeof(outputPathBuffer), path.c_str());
+		GetPrivateProfileString("Screenshot", "OutputPath", kDefaultScreenshotOutputPath, outputPathBuffer, sizeof(outputPathBuffer), path.c_str());
 		s_screenshotDir = ResolveScreenshotDirectory(outputPathBuffer);
 		if (!EnsureDirectoryTree(s_screenshotDir))
 		{
-			Log("Failed to create Screenshot.OutputPath '%s'; using Oblivion root", s_screenshotDir.c_str());
-			s_screenshotDir = s_oblivionDir;
-			EnsureTrailingSlash(s_screenshotDir);
+			Log("Failed to create Screenshot.OutputPath '%s'; falling back to %s", s_screenshotDir.c_str(), kDefaultScreenshotOutputPath);
+			s_screenshotDir = ResolveScreenshotDirectory(kDefaultScreenshotOutputPath);
+			if (!EnsureDirectoryTree(s_screenshotDir))
+			{
+				Log("Failed to create default screenshot directory '%s'; captures will not be saved", s_screenshotDir.c_str());
+				s_screenshotDir.clear();
+			}
 		}
 
 		s_gifProfile.maxWidth = ReadIniUInt(path, "GIF", "MaxWidth", 720, 1, 4096);
@@ -634,8 +639,18 @@ namespace
 
 	std::string MakeScreenshotPath(const char* extension)
 	{
-		const std::string& root = s_screenshotDir.empty() ? s_oblivionDir : s_screenshotDir;
-		EnsureDirectoryTree(root);
+		std::string root = s_screenshotDir;
+		if (root.empty())
+		{
+			root = ResolveScreenshotDirectory(kDefaultScreenshotOutputPath);
+			EnsureTrailingSlash(root);
+		}
+
+		if (!EnsureDirectoryTree(root))
+		{
+			Log("Cannot create screenshot output directory '%s'; skipping %s capture", root.c_str(), extension);
+			return "";
+		}
 
 		for (UInt32 idx = 0; idx < 10000; ++idx)
 		{
@@ -1158,6 +1173,9 @@ namespace
 			return;
 
 		std::string path = MakeScreenshotPath(FormatToString(format));
+		if (path.empty())
+			return;
+
 		if (!SaveStillFrame(path, format, frame))
 			Log("Still screenshot capture failed for %s", path.c_str());
 	}
@@ -1167,9 +1185,13 @@ namespace
 		if (s_recorder.active)
 			return;
 
+		std::string path = MakeScreenshotPath("gif");
+		if (path.empty())
+			return;
+
 		s_recorder.active = true;
 		s_recorder.frames.clear();
-		s_recorder.path = MakeScreenshotPath("gif");
+		s_recorder.path = path;
 		s_recorder.frameIntervalMs = std::max<UInt32>(1, 1000 / std::max<UInt32>(1, s_gifProfile.fps));
 		s_recorder.targetFrames = std::max<UInt32>(1, s_gifProfile.seconds * s_gifProfile.fps);
 		s_recorder.attemptedFrames = 0;
