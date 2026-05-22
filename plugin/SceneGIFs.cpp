@@ -583,6 +583,7 @@ namespace
 			s_gifProfile.seconds,
 			s_gifProfile.fps,
 			s_gifProfile.colors);
+		Log("Screenshot output path: %s", s_screenshotDir.c_str());
 	}
 
 	bool KeyIsDown(void* input, UInt16 keycode, bool previous)
@@ -634,18 +635,19 @@ namespace
 	std::string MakeScreenshotPath(const char* extension)
 	{
 		const std::string& root = s_screenshotDir.empty() ? s_oblivionDir : s_screenshotDir;
+		EnsureDirectoryTree(root);
 
 		for (UInt32 idx = 0; idx < 10000; ++idx)
 		{
-			char filename[MAX_PATH] = { 0 };
-			sprintf_s(filename, sizeof(filename), "%sScreenShot%u.%s", root.c_str(), idx, extension);
-			if (GetFileAttributes(filename) == INVALID_FILE_ATTRIBUTES)
+			char suffix[64] = { 0 };
+			sprintf_s(suffix, sizeof(suffix), "ScreenShot%u.%s", idx, extension);
+
+			std::string filename = root + suffix;
+			if (GetFileAttributes(filename.c_str()) == INVALID_FILE_ATTRIBUTES)
 				return filename;
 		}
 
-		char fallback[MAX_PATH] = { 0 };
-		sprintf_s(fallback, sizeof(fallback), "%sScreenShot.%s", root.c_str(), extension);
-		return fallback;
+		return root + "ScreenShot." + extension;
 	}
 
 	bool PathToWide(const std::string& path, std::wstring& out)
@@ -862,6 +864,7 @@ namespace
 		IWICBitmapFrameEncode* frameEncoder = nullptr;
 		IPropertyBag2* propertyBag = nullptr;
 		IWICBitmap* bitmap = nullptr;
+		IWICFormatConverter* converter = nullptr;
 		bool success = false;
 		WICPixelFormatGUID targetFormat = GUID_WICPixelFormat32bppBGRA;
 
@@ -885,8 +888,22 @@ namespace
 			goto cleanup;
 		if (!CreateBitmapFromFrame(factory, frame, &bitmap))
 			goto cleanup;
-		if (FAILED(frameEncoder->WriteSource(bitmap, nullptr)))
-			goto cleanup;
+
+		if (IsEqualGUID(targetFormat, GUID_WICPixelFormat32bppBGRA))
+		{
+			if (FAILED(frameEncoder->WriteSource(bitmap, nullptr)))
+				goto cleanup;
+		}
+		else
+		{
+			if (FAILED(factory->CreateFormatConverter(&converter)))
+				goto cleanup;
+			if (FAILED(converter->Initialize(bitmap, targetFormat, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeMedianCut)))
+				goto cleanup;
+			if (FAILED(frameEncoder->WriteSource(converter, nullptr)))
+				goto cleanup;
+		}
+
 		if (FAILED(frameEncoder->Commit()))
 			goto cleanup;
 		if (FAILED(encoder->Commit()))
@@ -895,6 +912,7 @@ namespace
 		success = true;
 
 	cleanup:
+		SafeRelease(converter);
 		SafeRelease(bitmap);
 		SafeRelease(propertyBag);
 		SafeRelease(frameEncoder);
@@ -902,6 +920,16 @@ namespace
 		SafeRelease(stream);
 		SafeRelease(factory);
 		return success;
+	}
+
+	GifExportAttempt ClampAttemptToProfile(const GifProfile& profile, UInt32 maxWidth, UInt32 maxHeight, UInt32 fps, UInt32 colors)
+	{
+		GifExportAttempt attempt = {};
+		attempt.maxWidth = std::max<UInt32>(1, std::min<UInt32>(profile.maxWidth, maxWidth));
+		attempt.maxHeight = std::max<UInt32>(1, std::min<UInt32>(profile.maxHeight, maxHeight));
+		attempt.fps = std::max<UInt32>(1, std::min<UInt32>(profile.fps, fps));
+		attempt.colors = std::max<UInt32>(2, std::min<UInt32>(profile.colors, colors));
+		return attempt;
 	}
 
 	void SetMetadataUInt16(IWICMetadataQueryWriter* writer, LPCWSTR name, UInt16 value)
@@ -1081,12 +1109,12 @@ namespace
 	{
 		const GifExportAttempt attempts[] =
 		{
-			{ profile.maxWidth, profile.maxHeight, profile.fps, profile.colors },
-			{ 720, 450, 12, 192 },
-			{ 680, 425, 12, 160 },
-			{ 640, 400, 10, 128 },
-			{ 600, 375, 10, 96 },
-			{ 560, 350, 10, 64 },
+			ClampAttemptToProfile(profile, profile.maxWidth, profile.maxHeight, profile.fps, profile.colors),
+			ClampAttemptToProfile(profile, 720, 450, 12, 192),
+			ClampAttemptToProfile(profile, 680, 425, 12, 160),
+			ClampAttemptToProfile(profile, 640, 400, 10, 128),
+			ClampAttemptToProfile(profile, 600, 375, 10, 96),
+			ClampAttemptToProfile(profile, 560, 350, 10, 64),
 		};
 
 		bool saved = false;
